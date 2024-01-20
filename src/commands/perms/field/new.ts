@@ -119,8 +119,9 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           const fieldPermissionSelected = fieldsPermissionSelected[field as keyof typeof fieldsPermissionSelected];
           if (permissionSetParsedJSON.PermissionSet.fieldPermissions) {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-shadow
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
             const fieldPermission = permissionSetParsedJSON.PermissionSet.fieldPermissions.find(
+              // eslint-disable-next-line @typescript-eslint/no-shadow
               (fieldPermission: FieldPermission) => fieldPermission.field === completeFieldName
             );
             if (fieldPermission) {
