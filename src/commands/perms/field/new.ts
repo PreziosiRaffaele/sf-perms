@@ -1,3 +1,4 @@
+/* eslint-disable class-methods-use-this */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import * as fs from 'node:fs/promises';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
@@ -119,8 +120,10 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           const fieldPermissionSelected = fieldsPermissionSelected[field as keyof typeof fieldsPermissionSelected];
           if (permissionSetParsedJSON.PermissionSet.fieldPermissions) {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            const fieldPermissions: FieldPermission[] = permissionSetParsedJSON.PermissionSet.fieldPermissions;
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-            const fieldPermission = permissionSetParsedJSON.PermissionSet.fieldPermissions.find(
+            const fieldPermission = fieldPermissions.find(
               // eslint-disable-next-line @typescript-eslint/no-shadow
               (fieldPermission: FieldPermission) => fieldPermission.field === completeFieldName
             );
@@ -128,12 +131,15 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
               fieldPermission.editable = fieldPermissionSelected === 'read_edit';
               fieldPermission.readable = fieldPermissionSelected !== 'none';
             } else {
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-              permissionSetParsedJSON.PermissionSet.fieldPermissions.push({
-                editable: fieldPermissionSelected === 'read_edit',
-                field: completeFieldName,
-                readable: fieldPermissionSelected !== 'none',
-              });
+              this.insertRespectingSorting(
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+                fieldPermissions,
+                {
+                  editable: fieldPermissionSelected === 'read_edit',
+                  field: completeFieldName,
+                  readable: fieldPermissionSelected !== 'none',
+                }
+              );
             }
           } else {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-call
@@ -155,5 +161,22 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     return {
       isSucces: true,
     };
+  }
+
+  private insertRespectingSorting(fieldPermissions: FieldPermission[], newFieldPermission: FieldPermission): void {
+    let low = 0;
+    let high = fieldPermissions.length - 1;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (fieldPermissions[mid].field === newFieldPermission.field) {
+        fieldPermissions.splice(mid, 0, newFieldPermission);
+        return;
+      } else if (fieldPermissions[mid].field < newFieldPermission.field) {
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    fieldPermissions.splice(low, 0, newFieldPermission);
   }
 }
