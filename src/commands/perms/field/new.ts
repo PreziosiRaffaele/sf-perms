@@ -37,7 +37,7 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
           permissionSetUpdater.updatePermissionSet(permissionSet, fieldsPermissionSelected, objectSelected)
         )
       );
-      this.log('Permission Sets Updated');
+      this.log(`Permission Sets ${permissionSetsSelected.join(', ')} updated successfully!`);
     } catch (err) {
       result.isSucces = false;
       result.errorMessage = (err as Error).message;
