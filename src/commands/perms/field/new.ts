@@ -1,16 +1,17 @@
 /* eslint-disable class-methods-use-this */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import * as fs from 'node:fs/promises';
+import * as fs from 'node:fs';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import { SfCommand } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
-import prompts from 'prompts';
+import prompts, { PromptObject } from 'prompts';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
 const messages = Messages.loadMessages('sf-perms', 'perms.field.new');
 
 export type PermsFieldNewResult = {
   isSucces: boolean;
+  errorMessage?: string;
 };
 
 interface FieldPermission {
@@ -28,90 +29,36 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
 
   // eslint-disable-next-line class-methods-use-this
   public async run(): Promise<PermsFieldNewResult> {
-    const [permissionsets, objects] = await Promise.all([
-      fs.readdir('./force-app/main/default/permissionsets'),
-      fs.readdir('./force-app/main/default/objects'),
-    ]);
+    const result: PermsFieldNewResult = {
+      isSucces: true,
+    };
 
-    const permissionSetChoises: prompts.Choice[] = permissionsets.map((file) => ({
-      title: file.split('.')[0],
-      value: file,
-    }));
+    try {
+      const { permissionSetsSelected, objectSelected } = await this.selectPermissionSetsAndObject();
+      const selectedFields = await this.selectFields(objectSelected);
+      const fieldsPermissionSelected = await this.selectFieldsPermissions(selectedFields);
+      this.updatePermissionSets(permissionSetsSelected, fieldsPermissionSelected, objectSelected);
+      this.log('Permission Sets Updated');
+    } catch (err) {
+      result.isSucces = false;
+      result.errorMessage = (err as Error).message;
+    }
 
-    const objectChoises: prompts.Choice[] = objects.map((file) => ({
-      title: file.split('.')[0],
-      value: file,
-    }));
+    return result;
+  }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unused-vars
-    const { permissionSetsSelected, objectSelected } = await prompts([
-      {
-        type: 'multiselect',
-        name: 'permissionSetsSelected',
-        message: 'Select Permission Sets',
-        choices: permissionSetChoises,
-        min: 1,
-      },
-      {
-        type: 'select',
-        name: 'objectSelected',
-        message: 'Select Objects',
-        choices: objectChoises,
-      },
-    ]);
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    const fields: string[] = await fs.readdir(`./force-app/main/default/objects/${objectSelected}/fields`);
-
-    const fieldChoises: prompts.Choice[] = fields.map((file) => ({
-      title: file.split('.')[0],
-      value: file.split('.')[0],
-    }));
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unused-vars
-    const selectedFields = await prompts({
-      type: 'multiselect',
-      name: 'Fields',
-      message: 'Select Fields',
-      choices: fieldChoises,
-      min: 1,
-    });
-
-    const fieldPermissionChoises: prompts.Choice[] = [
-      {
-        title: 'Read',
-        value: 'read',
-      },
-      {
-        title: 'Read/Edit',
-        value: 'read_edit',
-      },
-      {
-        title: 'None',
-        value: 'none',
-      },
-    ];
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-    const fieldsPermissionPrompts: Array<prompts.PromptObject<'Fields'>> = selectedFields.Fields.map(
-      (field: string) => ({
-        type: 'select',
-        name: field,
-        message: `Select Access for ${field}`,
-        choices: fieldPermissionChoises,
-      })
-    );
-
+  private updatePermissionSets(
+    permissionSetsSelected: string[],
+    fieldsPermissionSelected: { [key: string]: string },
+    objectSelected: string
+  ): void {
     const optionsParser = { ignoreAttributes: false };
     const optionsBuilder = { ignoreAttributes: false, format: true };
     const parser = new XMLParser(optionsParser);
     const builder = new XMLBuilder(optionsBuilder);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-    const fieldsPermissionSelected = await prompts(fieldsPermissionPrompts);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-    permissionSetsSelected.forEach(async (permissionSet: string) => {
-      const permissionSetXml = await fs.readFile(`./force-app/main/default/permissionsets/${permissionSet}`, 'utf8');
+    for (const permissionSet of permissionSetsSelected) {
+      const permissionSetXml = fs.readFileSync(`./force-app/main/default/permissionsets/${permissionSet}`, 'utf8');
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const permissionSetParsedJSON = parser.parse(permissionSetXml);
       for (const field in fieldsPermissionSelected) {
@@ -153,14 +100,99 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
           }
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           const xmlContent: string = builder.build(permissionSetParsedJSON);
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises, no-await-in-loop
-          await fs.writeFile(`./force-app/main/default/permissionsets/${permissionSet}`, xmlContent);
+          fs.writeFileSync(`./force-app/main/default/permissionsets/${permissionSet}`, xmlContent);
         }
       }
+    }
+  }
+
+  private async selectFields(objectSelected: string): Promise<string[]> {
+    const fields: string[] = fs.readdirSync(`./force-app/main/default/objects/${objectSelected}/fields`);
+
+    const fieldChoises: prompts.Choice[] = fields.map((file) => ({
+      title: file.split('.')[0],
+      value: file.split('.')[0],
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unused-vars
+    const selectedFields = await prompts({
+      type: 'multiselect',
+      name: 'Fields',
+      message: 'Select Fields',
+      choices: fieldChoises,
+      min: 1,
     });
-    return {
-      isSucces: true,
-    };
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return selectedFields.Fields;
+  }
+
+  private async selectPermissionSetsAndObject(): Promise<{
+    permissionSetsSelected: string[];
+    objectSelected: string;
+  }> {
+    const permissionsets = fs.readdirSync('./force-app/main/default/permissionsets');
+    const objects = fs.readdirSync('./force-app/main/default/objects');
+
+    const permissionSetChoises: prompts.Choice[] = permissionsets.map((file) => ({
+      title: file.split('.')[0],
+      value: file,
+    }));
+
+    const objectChoises: prompts.Choice[] = objects.map((file) => ({
+      title: file.split('.')[0],
+      value: file,
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unused-vars
+    const { permissionSetsSelected, objectSelected } = await prompts([
+      {
+        type: 'multiselect',
+        name: 'permissionSetsSelected',
+        message: 'Select Permission Sets',
+        choices: permissionSetChoises,
+        min: 1,
+      },
+      {
+        type: 'select',
+        name: 'objectSelected',
+        message: 'Select Objects',
+        choices: objectChoises,
+      },
+    ]);
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    return { permissionSetsSelected, objectSelected };
+  }
+
+  private async selectFieldsPermissions(selectedFields: string[]): Promise<{ [key: string]: string }> {
+    const fieldPermissionChoises: prompts.Choice[] = [
+      {
+        title: 'Read',
+        value: 'read',
+      },
+      {
+        title: 'Read/Edit',
+        value: 'read_edit',
+      },
+      {
+        title: 'None',
+        value: 'none',
+      },
+    ];
+
+    const fieldsPermissionPrompts: Array<PromptObject<string>> = selectedFields.map((field: string) => ({
+      type: 'select',
+      name: field,
+      message: `Select Access for ${field}`,
+      choices: fieldPermissionChoises,
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+    const fieldsPermissionSelected = await prompts(fieldsPermissionPrompts);
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return fieldsPermissionSelected;
   }
 
   private insertRespectingSorting(fieldPermissions: FieldPermission[], newFieldPermission: FieldPermission): void {
