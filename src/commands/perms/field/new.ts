@@ -1,10 +1,10 @@
 /* eslint-disable class-methods-use-this */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import * as fs from 'node:fs';
-import { XMLParser, XMLBuilder } from 'fast-xml-parser';
+import { promises as fsPromises } from 'node:fs';
 import { SfCommand } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import prompts, { PromptObject } from 'prompts';
+import { PermissionSetUpdater } from '../../../PermissionSetUpdater.js';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
 const messages = Messages.loadMessages('sf-perms', 'perms.field.new');
@@ -13,12 +13,6 @@ export type PermsFieldNewResult = {
   isSucces: boolean;
   errorMessage?: string;
 };
-
-interface FieldPermission {
-  editable: boolean;
-  field: string;
-  readable: boolean;
-}
 
 export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
   public static readonly summary = messages.getMessage('summary');
@@ -37,7 +31,12 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
       const { permissionSetsSelected, objectSelected } = await this.selectPermissionSetsAndObject();
       const selectedFields = await this.selectFields(objectSelected);
       const fieldsPermissionSelected = await this.selectFieldsPermissions(selectedFields);
-      this.updatePermissionSets(permissionSetsSelected, fieldsPermissionSelected, objectSelected);
+      const permissionSetUpdater = new PermissionSetUpdater(fsPromises);
+      await Promise.all(
+        permissionSetsSelected.map((permissionSet) =>
+          permissionSetUpdater.updatePermissionSet(permissionSet, fieldsPermissionSelected, objectSelected)
+        )
+      );
       this.log('Permission Sets Updated');
     } catch (err) {
       result.isSucces = false;
@@ -47,67 +46,8 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     return result;
   }
 
-  private updatePermissionSets(
-    permissionSetsSelected: string[],
-    fieldsPermissionSelected: { [key: string]: string },
-    objectSelected: string
-  ): void {
-    const optionsParser = { ignoreAttributes: false };
-    const optionsBuilder = { ignoreAttributes: false, format: true };
-    const parser = new XMLParser(optionsParser);
-    const builder = new XMLBuilder(optionsBuilder);
-
-    for (const permissionSet of permissionSetsSelected) {
-      const permissionSetXml = fs.readFileSync(`./force-app/main/default/permissionsets/${permissionSet}`, 'utf8');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const permissionSetParsedJSON = parser.parse(permissionSetXml);
-      for (const field in fieldsPermissionSelected) {
-        if (Object.prototype.hasOwnProperty.call(fieldsPermissionSelected, field)) {
-          const completeFieldName = `${objectSelected}.${field}`;
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          const fieldPermissionSelected = fieldsPermissionSelected[field as keyof typeof fieldsPermissionSelected];
-          if (permissionSetParsedJSON.PermissionSet.fieldPermissions) {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-            const fieldPermissions: FieldPermission[] = permissionSetParsedJSON.PermissionSet.fieldPermissions;
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-            const fieldPermission = fieldPermissions.find(
-              // eslint-disable-next-line @typescript-eslint/no-shadow
-              (fieldPermission: FieldPermission) => fieldPermission.field === completeFieldName
-            );
-            if (fieldPermission) {
-              fieldPermission.editable = fieldPermissionSelected === 'read_edit';
-              fieldPermission.readable = fieldPermissionSelected !== 'none';
-            } else {
-              this.insertRespectingSorting(
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-                fieldPermissions,
-                {
-                  editable: fieldPermissionSelected === 'read_edit',
-                  field: completeFieldName,
-                  readable: fieldPermissionSelected !== 'none',
-                }
-              );
-            }
-          } else {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-            permissionSetParsedJSON.PermissionSet.fieldPermissions = [
-              {
-                editable: fieldPermissionSelected === 'read_edit',
-                field: completeFieldName,
-                readable: fieldPermissionSelected !== 'none',
-              },
-            ];
-          }
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          const xmlContent: string = builder.build(permissionSetParsedJSON);
-          fs.writeFileSync(`./force-app/main/default/permissionsets/${permissionSet}`, xmlContent);
-        }
-      }
-    }
-  }
-
   private async selectFields(objectSelected: string): Promise<string[]> {
-    const fields: string[] = fs.readdirSync(`./force-app/main/default/objects/${objectSelected}/fields`);
+    const fields: string[] = await fsPromises.readdir(`./force-app/main/default/objects/${objectSelected}/fields`);
 
     const fieldChoises: prompts.Choice[] = fields.map((file) => ({
       title: file.split('.')[0],
@@ -131,8 +71,10 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     permissionSetsSelected: string[];
     objectSelected: string;
   }> {
-    const permissionsets = fs.readdirSync('./force-app/main/default/permissionsets');
-    const objects = fs.readdirSync('./force-app/main/default/objects');
+    const [permissionsets, objects]: [string[], string[]] = await Promise.all([
+      fsPromises.readdir('./force-app/main/default/permissionsets'),
+      fsPromises.readdir('./force-app/main/default/objects'),
+    ]);
 
     const permissionSetChoises: prompts.Choice[] = permissionsets.map((file) => ({
       title: file.split('.')[0],
@@ -193,22 +135,5 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return fieldsPermissionSelected;
-  }
-
-  private insertRespectingSorting(fieldPermissions: FieldPermission[], newFieldPermission: FieldPermission): void {
-    let low = 0;
-    let high = fieldPermissions.length - 1;
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      if (fieldPermissions[mid].field === newFieldPermission.field) {
-        fieldPermissions.splice(mid, 0, newFieldPermission);
-        return;
-      } else if (fieldPermissions[mid].field < newFieldPermission.field) {
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-    fieldPermissions.splice(low, 0, newFieldPermission);
   }
 }
