@@ -22,7 +22,7 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     directory: Flags.directory({
       summary: 'Default Directory',
       exists: true,
-      default: '/force-app/main/default',
+      default: './force-app/main/default',
       char: 'd',
     }),
   };
@@ -37,7 +37,7 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
 
     const { flags } = await this.parse(PermsFieldNew);
 
-    const directoryPath: string = path.resolve(process.cwd(), flags.directory);
+    const directoryPath: string = path.resolve(flags.directory);
 
     try {
       await this.checkDirectory(directoryPath);

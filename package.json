@@ -1,7 +1,7 @@
 {
   "name": "sf-perms",
   "description": "",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "dependencies": {
     "@oclif/core": "^3.18.1",
     "@salesforce/core": "^6.4.7",
@@ -48,10 +48,10 @@
     ],
     "topics": {
       "perms": {
-        "description": "description for perms",
+        "description": "Manage permission sets",
         "subtopics": {
           "field": {
-            "description": "description for perms.field"
+            "description": "Manage field permissions"
           }
         }
       }
