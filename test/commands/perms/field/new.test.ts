@@ -53,7 +53,7 @@ describe('perms field new', () => {
           return Promise.resolve({});
       }
     });
-    const result: PermsFieldNewResult = await PermsFieldNew.run([]);
+    const result: PermsFieldNewResult = await PermsFieldNew.run(['--directory', 'test/force-app/main/default']);
     expect(result).to.have.property('isSuccess', true);
     // check field permissions are added in the file
     const permissionSetXml = fs.readFileSync(

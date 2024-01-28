@@ -1,7 +1,7 @@
 /* eslint-disable class-methods-use-this */
 import path from 'node:path';
 import { promises as fsPromises } from 'node:fs';
-import { SfCommand } from '@salesforce/sf-plugins-core';
+import { Flags, SfCommand } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import prompts, { PromptObject } from 'prompts';
 import { PermissionSetUpdater } from '../../../PermissionSetUpdater.js';
@@ -18,7 +18,14 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
   public static readonly summary = messages.getMessage('summary');
   public static readonly description = messages.getMessage('description');
   public static readonly examples = messages.getMessages('examples');
-  public static readonly flags = {};
+  public static readonly flags = {
+    directory: Flags.directory({
+      summary: 'Default Directory',
+      exists: true,
+      default: '/force-app/main/default',
+      char: 'd',
+    }),
+  };
 
   public static fs = fsPromises;
   public static prompts = prompts;
@@ -28,7 +35,9 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
       isSuccess: true,
     };
 
-    const directoryPath: string = path.resolve(process.cwd(), 'test', 'force-app', 'main', 'default');
+    const { flags } = await this.parse(PermsFieldNew);
+
+    const directoryPath: string = path.resolve(process.cwd(), flags.directory);
 
     try {
       await this.checkDirectory(directoryPath);

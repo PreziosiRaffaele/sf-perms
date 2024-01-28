@@ -1,19 +1,15 @@
 # summary
 
-Summary of a command.
+Add field permissions to a permission set.
 
 # description
 
-More information about a command. Don't repeat the summary.
+Add field permissions to a permission set.
 
-# flags.name.summary
+# flags.directory.summary
 
-Description of a flag.
-
-# flags.name.description
-
-More information about a flag. Don't repeat the summary.
+The directory that contains the permissionSet/objects folder.
 
 # examples
 
-- <%= config.bin %> <%= command.id %>
+sf perms field new
