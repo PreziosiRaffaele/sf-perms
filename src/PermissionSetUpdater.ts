@@ -1,4 +1,5 @@
 /* eslint-disable class-methods-use-this */
+import path from 'node:path';
 import { promises as fsPromises } from 'node:fs';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
@@ -27,13 +28,14 @@ export class PermissionSetUpdater {
   }
 
   public async updatePermissionSet(
+    directoryPath: string,
     permissionSet: string,
     fieldsPermissionSelected: { [key: string]: string },
     objectSelected: string
   ): Promise<void> {
-    const completeFilePath = `./force-app/main/default/permissionsets/${permissionSet}`;
-    const permissionSetXml = await this.fs.readFile(completeFilePath, 'utf8');
-    const permissionSetParsedJSON = this.parser.parse(permissionSetXml) as PermissionSet;
+    const completeFilePath: string = path.resolve(directoryPath, 'permissionsets', permissionSet);
+    const permissionSetXml: string = await this.fs.readFile(completeFilePath, 'utf8');
+    const permissionSetParsedJSON: PermissionSet = this.parser.parse(permissionSetXml) as PermissionSet;
 
     for (const field in fieldsPermissionSelected) {
       if (Object.prototype.hasOwnProperty.call(fieldsPermissionSelected, field)) {

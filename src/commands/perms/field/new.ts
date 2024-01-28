@@ -1,5 +1,5 @@
 /* eslint-disable class-methods-use-this */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+import path from 'node:path';
 import { promises as fsPromises } from 'node:fs';
 import { SfCommand } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
@@ -10,7 +10,7 @@ Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
 const messages = Messages.loadMessages('sf-perms', 'perms.field.new');
 
 export type PermsFieldNewResult = {
-  isSucces: boolean;
+  isSuccess: boolean;
   errorMessage?: string;
 };
 
@@ -18,36 +18,59 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
   public static readonly summary = messages.getMessage('summary');
   public static readonly description = messages.getMessage('description');
   public static readonly examples = messages.getMessages('examples');
-
   public static readonly flags = {};
 
-  // eslint-disable-next-line class-methods-use-this
+  public static fs = fsPromises;
+  public static prompts = prompts;
+
   public async run(): Promise<PermsFieldNewResult> {
     const result: PermsFieldNewResult = {
-      isSucces: true,
+      isSuccess: true,
     };
 
+    const directoryPath: string = path.resolve(process.cwd(), 'test', 'force-app', 'main', 'default');
+
     try {
-      const { permissionSetsSelected, objectSelected } = await this.selectPermissionSetsAndObject();
-      const selectedFields = await this.selectFields(objectSelected);
+      await this.checkDirectory(directoryPath);
+      const { permissionSetsSelected, objectSelected } = await this.selectPermissionSetsAndObject(directoryPath);
+      const selectedFields = await this.selectFields(objectSelected, directoryPath);
       const fieldsPermissionSelected = await this.selectFieldsPermissions(selectedFields);
-      const permissionSetUpdater = new PermissionSetUpdater(fsPromises);
+      const permissionSetUpdater = new PermissionSetUpdater(PermsFieldNew.fs);
       await Promise.all(
         permissionSetsSelected.map((permissionSet) =>
-          permissionSetUpdater.updatePermissionSet(permissionSet, fieldsPermissionSelected, objectSelected)
+          permissionSetUpdater.updatePermissionSet(
+            directoryPath,
+            permissionSet,
+            fieldsPermissionSelected,
+            objectSelected
+          )
         )
       );
       this.log(`Permission Sets ${permissionSetsSelected.join(', ')} updated successfully!`);
     } catch (err) {
-      result.isSucces = false;
+      result.isSuccess = false;
       result.errorMessage = (err as Error).message;
     }
 
     return result;
   }
 
-  private async selectFields(objectSelected: string): Promise<string[]> {
-    const fields: string[] = await fsPromises.readdir(`./force-app/main/default/objects/${objectSelected}/fields`);
+  private async checkDirectory(directoryPath: string): Promise<void> {
+    try {
+      await PermsFieldNew.fs.access(directoryPath);
+    } catch (err) {
+      throw new Error(`Directory ${directoryPath} not found`);
+    }
+    const files = await PermsFieldNew.fs.readdir(directoryPath);
+    if (files.length === 0) {
+      throw new Error(`Directory ${directoryPath} is empty`);
+    }
+  }
+
+  private async selectFields(objectSelected: string, directoryPath: string): Promise<string[]> {
+    const pathToFields: string = path.resolve(directoryPath, 'objects', objectSelected, 'fields');
+    await this.checkDirectory(pathToFields);
+    const fields: string[] = await PermsFieldNew.fs.readdir(pathToFields);
 
     const fieldChoises: prompts.Choice[] = fields.map((file) => ({
       title: file.split('.')[0],
@@ -55,7 +78,7 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     }));
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unused-vars
-    const selectedFields = await prompts({
+    const selectedFields = await PermsFieldNew.prompts({
       type: 'multiselect',
       name: 'Fields',
       message: 'Select Fields',
@@ -67,13 +90,18 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     return selectedFields.Fields;
   }
 
-  private async selectPermissionSetsAndObject(): Promise<{
+  private async selectPermissionSetsAndObject(directoryPath: string): Promise<{
     permissionSetsSelected: string[];
     objectSelected: string;
   }> {
+    const pathToPermissionSets: string = path.resolve(directoryPath, 'permissionsets');
+    await this.checkDirectory(pathToPermissionSets);
+    const pathToObjects: string = path.resolve(directoryPath, 'objects');
+    await this.checkDirectory(pathToObjects);
+
     const [permissionsets, objects]: [string[], string[]] = await Promise.all([
-      fsPromises.readdir('./force-app/main/default/permissionsets'),
-      fsPromises.readdir('./force-app/main/default/objects'),
+      PermsFieldNew.fs.readdir(pathToPermissionSets),
+      PermsFieldNew.fs.readdir(pathToObjects),
     ]);
 
     const permissionSetChoises: prompts.Choice[] = permissionsets.map((file) => ({
@@ -87,7 +115,7 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     }));
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unused-vars
-    const { permissionSetsSelected, objectSelected } = await prompts([
+    const { permissionSetsSelected, objectSelected } = await PermsFieldNew.prompts([
       {
         type: 'multiselect',
         name: 'permissionSetsSelected',
@@ -131,7 +159,7 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     }));
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-    const fieldsPermissionSelected = await prompts(fieldsPermissionPrompts);
+    const fieldsPermissionSelected = await PermsFieldNew.prompts(fieldsPermissionPrompts);
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return fieldsPermissionSelected;
