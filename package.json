@@ -1,7 +1,7 @@
 {
   "name": "sf-perms",
   "description": "",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "dependencies": {
     "@oclif/core": "^3.18.1",
     "@salesforce/core": "^6.4.7",

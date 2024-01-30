@@ -16,11 +16,6 @@ interface PermissionSet {
 }
 
 export class PermissionSetUpdater {
-  private parserOptions = { ignoreAttributes: false };
-  private builderOptions = { ignoreAttributes: false, format: true };
-
-  private parser = new XMLParser(this.parserOptions);
-  private builder = new XMLBuilder(this.builderOptions);
   private fs;
 
   public constructor(fs: typeof fsPromises) {
@@ -35,7 +30,9 @@ export class PermissionSetUpdater {
   ): Promise<void> {
     const completeFilePath: string = path.resolve(directoryPath, 'permissionsets', permissionSet);
     const permissionSetXml: string = await this.fs.readFile(completeFilePath, 'utf8');
-    const permissionSetParsedJSON: PermissionSet = this.parser.parse(permissionSetXml) as PermissionSet;
+    const indentation: string = this.getIndentation(permissionSetXml);
+    const parser = new XMLParser({ ignoreAttributes: false });
+    const permissionSetParsedJSON: PermissionSet = parser.parse(permissionSetXml) as PermissionSet;
 
     for (const field in fieldsPermissionSelected) {
       if (Object.prototype.hasOwnProperty.call(fieldsPermissionSelected, field)) {
@@ -58,9 +55,14 @@ export class PermissionSetUpdater {
         }
       }
     }
-
-    const xmlContent: string = this.builder.build(permissionSetParsedJSON) as string;
+    const builder = new XMLBuilder({ ignoreAttributes: false, format: true, indentBy: indentation });
+    const xmlContent: string = builder.build(permissionSetParsedJSON) as string;
     await this.fs.writeFile(completeFilePath, xmlContent);
+  }
+
+  private getIndentation(permissionSetXml: string): string {
+    const match = permissionSetXml.match(/^( |\t)+/m);
+    return match ? match[0] : '  '; // Default to two spaces if no indentation is found
   }
 
   private insertRespectingSorting(fieldPermissions: FieldPermission[], newFieldPermission: FieldPermission): void {
