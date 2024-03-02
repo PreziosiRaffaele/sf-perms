@@ -1,7 +1,7 @@
 {
   "name": "sf-perms",
   "description": "Manage Permission Set Field Permissions",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "dependencies": {
     "@oclif/core": "^3.18.1",
     "@salesforce/core": "^6.4.7",
