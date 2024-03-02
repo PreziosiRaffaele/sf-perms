@@ -1,6 +1,8 @@
 /* eslint-disable class-methods-use-this */
 import path from 'node:path';
 import { promises as fsPromises } from 'node:fs';
+// eslint-disable-next-line import/no-extraneous-dependencies
+import chalk from 'chalk';
 import { Flags, SfCommand } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import prompts, { PromptObject } from 'prompts';
@@ -55,7 +57,7 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
           )
         )
       );
-      this.log(`Permission Sets ${permissionSetsSelected.join(', ')} updated successfully!`);
+      this.log(chalk.greenBright(`Permission Sets ${permissionSetsSelected.join(', ')} updated successfully!`));
     } catch (err) {
       result.isSuccess = false;
       result.errorMessage = (err as Error).message;
