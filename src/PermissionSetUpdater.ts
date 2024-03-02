@@ -12,7 +12,7 @@ interface FieldPermission {
 interface PermissionSet {
   PermissionSet: {
     [key: string]: unknown;
-    fieldPermissions?: FieldPermission[];
+    fieldPermissions?: FieldPermission[] | FieldPermission;
   };
 }
 
@@ -39,7 +39,7 @@ export class PermissionSetUpdater {
       if (Object.prototype.hasOwnProperty.call(fieldsPermissionSelected, field)) {
         const completeFieldName = `${objectSelected}.${field}`;
         const fieldPermissionSelected = fieldsPermissionSelected[field as keyof typeof fieldsPermissionSelected];
-        let fieldPermissions: FieldPermission[];
+        let fieldPermissions: FieldPermission[] | FieldPermission;
         if (permissionSetParsedJSON.PermissionSet.fieldPermissions) {
           fieldPermissions = permissionSetParsedJSON.PermissionSet.fieldPermissions;
         } else {
@@ -53,6 +53,11 @@ export class PermissionSetUpdater {
             obj[v] = permissionSetParsedJSON.PermissionSet[v];
             return obj;
           }, {});
+        }
+
+        if (!Array.isArray(fieldPermissions)) {
+          fieldPermissions = [fieldPermissions];
+          permissionSetParsedJSON.PermissionSet.fieldPermissions = fieldPermissions;
         }
 
         const fieldPermission = fieldPermissions.find((fp) => fp.field === completeFieldName);
