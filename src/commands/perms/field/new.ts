@@ -22,10 +22,21 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
   public static readonly examples = messages.getMessages('examples');
   public static readonly flags = {
     directory: Flags.directory({
-      summary: 'Default Directory',
+      summary: messages.getMessage('flags.directory.summary'),
       exists: true,
-      default: './force-app/main/default',
       char: 'd',
+    }),
+    'directory-permission-set': Flags.directory({
+      // eslint-disable-next-line sf-plugin/no-missing-messages
+      summary: messages.getMessage('flags[directory-permission-set].summary'),
+      exists: true,
+      char: 'p',
+    }),
+    'directory-object': Flags.directory({
+      // eslint-disable-next-line sf-plugin/no-missing-messages
+      summary: messages.getMessage('flags[directory-object].summary'),
+      exists: true,
+      char: 'f',
     }),
   };
 
@@ -38,19 +49,35 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     };
 
     const { flags } = await this.parse(PermsFieldNew);
-
-    const directoryPath: string = path.resolve(flags.directory);
-
     try {
-      await this.checkDirectory(directoryPath);
-      const { permissionSetsSelected, objectSelected } = await this.selectPermissionSetsAndObject(directoryPath);
-      const selectedFields = await this.selectFields(objectSelected, directoryPath);
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+      if (flags.directory && (flags['directory-permission-set'] || flags['directory-object'])) {
+        throw new Error('You cannot provide Default Directory with Permission Set Directory or Object Directory');
+      }
+      if (!flags.directory && (!flags['directory-permission-set'] || !flags['directory-object'])) {
+        throw new Error('You should provide both permission set directory and object directory');
+      }
+      if (!flags.directory) {
+        flags.directory = './force-app/main/default';
+      }
+      const directoryPermissionSets = flags['directory-permission-set']
+        ? path.resolve(flags['directory-permission-set'])
+        : path.resolve(flags.directory);
+      const directoryObjects = flags['directory-object']
+        ? path.resolve(flags['directory-object'])
+        : path.resolve(flags.directory);
+      await Promise.all([this.checkDirectory(directoryPermissionSets), this.checkDirectory(directoryObjects)]);
+      const { permissionSetsSelected, objectSelected } = await this.selectPermissionSetsAndObject(
+        directoryPermissionSets,
+        directoryObjects
+      );
+      const selectedFields = await this.selectFields(objectSelected, directoryObjects);
       const fieldsPermissionSelected = await this.selectFieldsPermissions(selectedFields);
       const permissionSetUpdater = new PermissionSetUpdater(PermsFieldNew.fs);
       await Promise.all(
         permissionSetsSelected.map((permissionSet) =>
           permissionSetUpdater.updatePermissionSet(
-            directoryPath,
+            directoryPermissionSets,
             permissionSet,
             fieldsPermissionSelected,
             objectSelected
@@ -61,6 +88,7 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     } catch (err) {
       result.isSuccess = false;
       result.errorMessage = (err as Error).message;
+      this.log(chalk.redBright(result.errorMessage));
     }
 
     return result;
@@ -101,13 +129,16 @@ export default class PermsFieldNew extends SfCommand<PermsFieldNewResult> {
     return selectedFields.Fields;
   }
 
-  private async selectPermissionSetsAndObject(directoryPath: string): Promise<{
+  private async selectPermissionSetsAndObject(
+    directoryPermissionSets: string,
+    directoryObjects: string
+  ): Promise<{
     permissionSetsSelected: string[];
     objectSelected: string;
   }> {
-    const pathToPermissionSets: string = path.resolve(directoryPath, 'permissionsets');
+    const pathToPermissionSets: string = path.resolve(directoryPermissionSets, 'permissionsets');
     await this.checkDirectory(pathToPermissionSets);
-    const pathToObjects: string = path.resolve(directoryPath, 'objects');
+    const pathToObjects: string = path.resolve(directoryObjects, 'objects');
     await this.checkDirectory(pathToObjects);
 
     const [permissionsets, objects]: [string[], string[]] = await Promise.all([
